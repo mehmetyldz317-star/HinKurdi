@@ -56,7 +56,8 @@ jobs:
           if marker not in s: raise SystemExit('native marker missing')
           p.write_text(s.replace(marker,method+marker))
           PY
-          test -s app/src/main/java/com/hinkurdi/app/MainActivity.java\n          grep -q "void openDialogue" app/src/main/java/com/hinkurdi/app/MainActivity.java
+          test -s app/src/main/java/com/hinkurdi/app/MainActivity.java
+          grep -q "void openDialogue" app/src/main/java/com/hinkurdi/app/MainActivity.java
 
           cat .bootstrap/v24.part*.b64 > /tmp/v24.html.gz.b64
           base64 -d /tmp/v24.html.gz.b64 | gzip -d > /tmp/v24.html
