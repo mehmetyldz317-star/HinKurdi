@@ -27,7 +27,36 @@ jobs:
           mkdir -p app/src/main/java/com/hinkurdi/app
           cat .native-v25/main.part*.b64 > /tmp/v25-main.java.gz.b64
           base64 -d /tmp/v25-main.java.gz.b64 | gzip -d > app/src/main/java/com/hinkurdi/app/MainActivity.java
-          echo "5006ed60d7277ded97a99bceb82c4f15e15f19a1e82ad5d6ca8c9b97156c999d  app/src/main/java/com/hinkurdi/app/MainActivity.java" | sha256sum -c -
+
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('app/src/main/java/com/hinkurdi/app/MainActivity.java')
+          s=p.read_text()
+          marker='    // ---------- Data / audio ----------\n'
+          method=r'''    void openDialogue(String id){
+              JSONObject f=full.optJSONObject(id); if(f==null)return;
+              JSONObject d=f.optJSONObject("dialogue"); JSONArray lines=d==null?null:d.optJSONArray("lines");
+              LinearLayout root=vbox(); root.setBackgroundColor(BG); pad(root,16,14,16,24);
+              LinearLayout top=hbox(); TextView back=action("‹ Geri",PAPER,INK,v->showHome()); top.addView(back,new LinearLayout.LayoutParams(dp(100),dp(48)));
+              LinearLayout title=vbox(); title.addView(tv(f.optString("title"),18,INK,true)); title.addView(tv("Kısa konuşma · dinle ve tekrar et",10,MUTED,false)); margin(title,10,0,0,0); top.addView(title,new LinearLayout.LayoutParams(0,-2,1)); root.addView(top);
+              LinearLayout list=vbox(); pad(list,0,12,0,30);
+              if(lines!=null) for(int i=0;i<lines.length();i++){
+                  JSONArray line=lines.optJSONArray(i); if(line==null)continue;
+                  String who=line.optString(0), ku=line.optString(1), tr=line.optString(2);
+                  LinearLayout bubble=vbox(); bubble.setBackground(box(i%2==0?SAGE:PLUM2,18)); pad(bubble,13,11,13,11);
+                  bubble.addView(tv(who+" · "+ku,14,INK,true)); bubble.addView(tv(tr,11,MUTED,false));
+                  TextView play=pill("▶ Dinle",PAPER,GREEN); play.setOnClickListener(v->speak(ku)); bubble.addView(play);
+                  list.addView(bubble,new LinearLayout.LayoutParams(-1,-2)); margin(bubble,i%2==0?0:38,9,i%2==0?38:0,0);
+              }
+              TextView done=action("Tamam",FOREST,Color.WHITE,v->showHome()); list.addView(done,new LinearLayout.LayoutParams(-1,dp(54))); margin(done,0,18,0,0);
+              root.addView(scroll(list),new LinearLayout.LayoutParams(-1,0,1)); setContentView(root);
+          }
+
+          '''
+          if marker not in s: raise SystemExit('native marker missing')
+          p.write_text(s.replace(marker,method+marker))
+          PY
+          echo "1cfb84e3829404085dffc2476adae85cd99deaf5d14a2317319ed7273a264044  app/src/main/java/com/hinkurdi/app/MainActivity.java" | sha256sum -c -
 
           cat .bootstrap/v24.part*.b64 > /tmp/v24.html.gz.b64
           base64 -d /tmp/v24.html.gz.b64 | gzip -d > /tmp/v24.html
