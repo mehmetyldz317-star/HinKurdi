@@ -1,4 +1,4 @@
-name: Build HînKurdî APK
+name: Build HînKurdî Native APK
 
 on:
   workflow_dispatch:
@@ -13,7 +13,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Restore Android shell and inject V24
+      - name: Restore Android shell
         shell: bash
         run: |
           cat .bootstrap/project.part*.b64 > /tmp/HinKurdi.b64
@@ -21,14 +21,38 @@ jobs:
           echo "e98d354428f17dbfd06587387780f2d13efa0f729150c16d6e00802d9710e479  /tmp/HinKurdi.zip" | sha256sum -c -
           unzip -o /tmp/HinKurdi.zip -d .
 
-          cat .bootstrap/v24.part*.b64 > /tmp/v24-index.html.gz.b64
-          base64 -d /tmp/v24-index.html.gz.b64 | gzip -d > app/src/main/assets/index.html
-          echo "9798ffe0a3f5eb89e75091f9870ad5185ac8907398a30832545af2d189072be3  app/src/main/assets/index.html" | sha256sum -c -
+      - name: Inject native V25 app and content
+        shell: bash
+        run: |
+          mkdir -p app/src/main/java/com/hinkurdi/app
+          cat .native-v25/main.part*.b64 > /tmp/v25-main.java.gz.b64
+          base64 -d /tmp/v25-main.java.gz.b64 | gzip -d > app/src/main/java/com/hinkurdi/app/MainActivity.java
+          echo "5006ed60d7277ded97a99bceb82c4f15e15f19a1e82ad5d6ca8c9b97156c999d  app/src/main/java/com/hinkurdi/app/MainActivity.java" | sha256sum -c -
+
+          cat .bootstrap/v24.part*.b64 > /tmp/v24.html.gz.b64
+          base64 -d /tmp/v24.html.gz.b64 | gzip -d > /tmp/v24.html
+          echo "9798ffe0a3f5eb89e75091f9870ad5185ac8907398a30832545af2d189072be3  /tmp/v24.html" | sha256sum -c -
+
+          mkdir -p app/src/main/assets
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          s=Path('/tmp/v24.html').read_text(encoding='utf-8')
+          start=s.index('const DATA=')+len('const DATA=')
+          data,_=json.JSONDecoder().raw_decode(s[start:])
+          Path('app/src/main/assets/content.json').write_text(
+              json.dumps(data,ensure_ascii=False,separators=(',',':')),
+              encoding='utf-8'
+          )
+          PY
+          echo "80b02adfeae07fb3ff63c61d7b245ffe7d9485b53a8f641f9e7598337fd30d2d  app/src/main/assets/content.json" | sha256sum -c -
+
+          rm -f app/src/main/assets/index.html
 
           sed -i 's/compileSdk = 37/compileSdk = 36/' app/build.gradle.kts
           sed -i 's/targetSdk = 37/targetSdk = 36/' app/build.gradle.kts
-          sed -i 's/versionCode = 20/versionCode = 24/' app/build.gradle.kts
-          sed -i 's/versionName = "0.20.0-rc2"/versionName = "0.24.0-foundation-01"/' app/build.gradle.kts
+          sed -i 's/versionCode = 20/versionCode = 25/' app/build.gradle.kts
+          sed -i 's/versionName = "0.20.0-rc2"/versionName = "0.25.0-native-01"/' app/build.gradle.kts
 
       - name: Set up stable development signing
         shell: bash
@@ -60,12 +84,12 @@ jobs:
         with:
           gradle-version: "9.6.0"
 
-      - name: Build V24 debug APK
+      - name: Build V25 native debug APK
         run: gradle --no-daemon :app:assembleDebug
 
-      - name: Upload V24 APK
+      - name: Upload V25 native APK
         uses: actions/upload-artifact@v4
         with:
-          name: HinKurdi-V24-Foundation-stable-debug-apk
+          name: HinKurdi-V25-Native-stable-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
