@@ -46,7 +46,7 @@ jobs:
 
           python3 - <<'PY'
           from pathlib import Path
-          import xml.etree.ElementTree as ET
+          import re
 
           ANDROID = "{http://schemas.android.com/apk/res/android}"
 
@@ -125,19 +125,19 @@ jobs:
               "com.android.vending.CHECK_LICENSE",
           }
 
+          perm_block = re.compile(r'\\s*<uses-permission\\b.*?/>\\s*', re.S)
+          name_re = re.compile(r'android:name="([^"]+)"')
           for manifest in Path(".").glob("**/src/main/AndroidManifest.xml"):
               try:
-                  tree = ET.parse(manifest)
-                  root = tree.getroot()
-                  changed = False
-                  for child in list(root):
-                      if child.tag == "uses-permission":
-                          name = child.attrib.get(ANDROID + "name", "")
-                          if name not in allowed:
-                              root.remove(child)
-                              changed = True
-                  if changed:
-                      tree.write(manifest, encoding="utf-8", xml_declaration=True)
+                  raw = manifest.read_text(encoding="utf-8")
+                  def keep_or_drop(match):
+                      block = match.group(0)
+                      m = name_re.search(block)
+                      if not m:
+                          return block
+                      return block if m.group(1) in allowed else "\n"
+                  cleaned = perm_block.sub(keep_or_drop, raw)
+                  manifest.write_text(cleaned, encoding="utf-8")
               except Exception as e:
                   print("manifest sanitize skipped", manifest, e)
 
