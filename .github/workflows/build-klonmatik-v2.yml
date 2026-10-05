@@ -125,7 +125,7 @@ jobs:
               "com.android.vending.CHECK_LICENSE",
           }
 
-          perm_block = re.compile(r'\\s*<uses-permission\\b.*?/>\\s*', re.S)
+          perm_block = re.compile(r'\s*<uses-permission\b.*?/>\s*', re.S)
           name_re = re.compile(r'android:name="([^"]+)"')
           for manifest in Path(".").glob("**/src/main/AndroidManifest.xml"):
               try:
