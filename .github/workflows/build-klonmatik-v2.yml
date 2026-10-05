@@ -1,0 +1,272 @@
+name: Build KlonMatik V5 Compat APK
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/build-klonmatik-v2.yml'
+      - 'KlonMatik/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout wrapper repo
+        uses: actions/checkout@v4
+
+      - name: Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install Android SDK packages
+        shell: bash
+        run: |
+          export ANDROID_HOME=/usr/local/lib/android/sdk
+          export ANDROID_SDK_ROOT=/usr/local/lib/android/sdk
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platform-tools" "platforms;android-35" "build-tools;35.0.0" "ndk;29.0.13846066" "cmake;3.22.1"
+
+      - name: Fetch pinned virtualization engine
+        shell: bash
+        run: |
+          rm -rf .ci_klonmatik
+          git clone --filter=blob:none https://github.com/Black00Z/Blacks-BlackBox.git .ci_klonmatik
+          cd .ci_klonmatik
+          git checkout 40282a7bf4500948cfd598fc67e6e63114b26dd9
+
+      - name: Apply Android 15 compatibility profile
+        shell: bash
+        run: |
+          cd .ci_klonmatik
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          ANDROID = "{http://schemas.android.com/apk/res/android}"
+
+          # Modern target SDK and stable package identity.
+          root_gradle = Path("build.gradle")
+          s = root_gradle.read_text(encoding="utf-8")
+          s = s.replace("targetSdkVersion = 28", "targetSdkVersion = 28")
+          s = s.replace("versionCode = 460", "versionCode = 490")
+          s = s.replace("versionName = \"4.7.1\"", "versionName = \"4.9.0\"")
+          root_gradle.write_text(s, encoding="utf-8")
+
+          app_gradle = Path("app/build.gradle")
+          s = app_gradle.read_text(encoding="utf-8")
+          s = s.replace('applicationId "com.onebitmonochrome.blacksbbox"',
+                        'applicationId "com.naturel.klonmatik"')
+          app_gradle.write_text(s, encoding="utf-8")
+
+          # Keep only permissions a normal third-party container may reasonably
+          # request. Remove platform-signature, OEM, legacy and cross-user powers.
+          allowed = {
+              "android.permission.QUERY_ALL_PACKAGES",
+              "android.permission.INTERNET",
+              "android.permission.ACCESS_NETWORK_STATE",
+              "android.permission.ACCESS_WIFI_STATE",
+              "android.permission.CHANGE_WIFI_STATE",
+              "android.permission.CHANGE_NETWORK_STATE",
+              "android.permission.CHANGE_WIFI_MULTICAST_STATE",
+              "android.permission.FOREGROUND_SERVICE",
+              "android.permission.FOREGROUND_SERVICE_DATA_SYNC",
+              "android.permission.FOREGROUND_SERVICE_LOCATION",
+              "android.permission.FOREGROUND_SERVICE_CAMERA",
+              "android.permission.FOREGROUND_SERVICE_MICROPHONE",
+              "android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE",
+              "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+              "android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION",
+              "android.permission.FOREGROUND_SERVICE_SPECIAL_USE",
+              "android.permission.WAKE_LOCK",
+              "android.permission.SYSTEM_ALERT_WINDOW",
+              "android.permission.ACCESS_FINE_LOCATION",
+              "android.permission.ACCESS_COARSE_LOCATION",
+              "android.permission.ACCESS_BACKGROUND_LOCATION",
+              "android.permission.CAMERA",
+              "android.permission.RECORD_AUDIO",
+              "android.permission.MODIFY_AUDIO_SETTINGS",
+              "android.permission.BLUETOOTH",
+              "android.permission.BLUETOOTH_ADMIN",
+              "android.permission.BLUETOOTH_CONNECT",
+              "android.permission.BLUETOOTH_SCAN",
+              "android.permission.BLUETOOTH_ADVERTISE",
+              "android.permission.NEARBY_WIFI_DEVICES",
+              "android.permission.READ_EXTERNAL_STORAGE",
+              "android.permission.WRITE_EXTERNAL_STORAGE",
+              "android.permission.READ_MEDIA_IMAGES",
+              "android.permission.READ_MEDIA_VIDEO",
+              "android.permission.READ_MEDIA_AUDIO",
+              "android.permission.ACCESS_MEDIA_LOCATION",
+              "android.permission.POST_NOTIFICATIONS",
+              "android.permission.VIBRATE",
+              "android.permission.NFC",
+              "android.permission.GET_ACCOUNTS",
+              "android.permission.READ_PHONE_STATE",
+              "android.permission.READ_PHONE_NUMBERS",
+              "android.permission.READ_CONTACTS",
+              "android.permission.WRITE_CONTACTS",
+              "android.permission.READ_CALENDAR",
+              "android.permission.WRITE_CALENDAR",
+              "android.permission.CALL_PHONE",
+              "android.permission.READ_SMS",
+              "android.permission.RECEIVE_SMS",
+              "android.permission.SEND_SMS",
+              "android.permission.RECEIVE_BOOT_COMPLETED",
+              "android.permission.GET_TASKS",
+              "android.permission.REORDER_TASKS",
+              "android.permission.KILL_BACKGROUND_PROCESSES",
+              "android.permission.EXPAND_STATUS_BAR",
+              "android.permission.DISABLE_KEYGUARD",
+              "android.permission.BROADCAST_STICKY",
+              "android.permission.GET_PACKAGE_SIZE",
+              "android.permission.WRITE_SYNC_SETTINGS",
+              "android.permission.READ_SYNC_SETTINGS",
+              "android.permission.READ_SYNC_STATS",
+              "android.permission.SET_WALLPAPER",
+              "android.permission.SET_WALLPAPER_HINTS",
+              "android.permission.REQUEST_INSTALL_PACKAGES",
+              "android.permission.USE_BIOMETRIC",
+              "android.permission.USE_FINGERPRINT",
+              "com.google.android.c2dm.permission.RECEIVE",
+              "com.android.vending.BILLING",
+              "com.android.vending.CHECK_LICENSE",
+          }
+
+          perm_block = re.compile(r'\s*<uses-permission\b.*?/>\s*', re.S)
+          name_re = re.compile(r'android:name="([^"]+)"')
+          for manifest in Path(".").glob("**/src/main/AndroidManifest.xml"):
+              try:
+                  raw = manifest.read_text(encoding="utf-8")
+                  def keep_or_drop(match):
+                      block = match.group(0)
+                      m = name_re.search(block)
+                      if not m:
+                          return block
+                      return block if m.group(1) in allowed else "\n"
+                  cleaned = perm_block.sub(keep_or_drop, raw)
+                  manifest.write_text(cleaned, encoding="utf-8")
+              except Exception as e:
+                  print("manifest sanitize skipped", manifest, e)
+
+          # Fail fast if source sanitizing did not actually remove privileged/OEM permissions.
+          source_check = Path("Bcore/src/main/AndroidManifest.xml").read_text(encoding="utf-8")
+          forbidden = [
+              "android.permission.INSTALL_PACKAGES",
+              "android.permission.DELETE_PACKAGES",
+              "android.permission.INTERACT_ACROSS_USERS",
+              "android.permission.INTERACT_ACROSS_USERS_FULL",
+              "android.permission.DEVICE_POWER",
+              "android.permission.READ_LOGS",
+              "com.samsung.svoice.sync.READ_DATABASE",
+              "com.huawei.authentication.HW_ACCESS_AUTH_SERVICE",
+          ]
+          leaked = [p for p in forbidden if p in source_check]
+          if leaked:
+              raise SystemExit("Forbidden permissions still present: " + ", ".join(leaked))
+          print("Sanitized Bcore permission count:", source_check.count("<uses-permission"))
+
+          # Branding.
+          p = Path("app/src/main/res/values/strings.xml")
+          s = p.read_text(encoding="utf-8")
+          s = s.replace("Black\\'s BlackBox", "KlonMatik")
+          s = s.replace("BlackBox", "KlonMatik")
+          p.write_text(s, encoding="utf-8")
+
+          menu = Path("app/src/main/res/menu/menu_main.xml")
+          menu.write_text("""<?xml version=\"1.0\" encoding=\"utf-8\"?>
+          <menu xmlns:android=\"http://schemas.android.com/apk/res/android\"
+                xmlns:app=\"http://schemas.android.com/apk/res-auto\">
+              <item android:id=\"@+id/main_setting\" android:title=\"@string/setting\" app:showAsAction=\"never\" />
+              <item android:id=\"@+id/fake_location\" android:title=\"@string/fake_location\" android:visible=\"false\" app:showAsAction=\"never\" />
+              <item android:id=\"@+id/device_spoofing\" android:title=\"@string/device_spoofing\" android:visible=\"false\" app:showAsAction=\"never\" />
+              <item android:id=\"@+id/blackbox_gallery\" android:title=\"@string/blackbox_gallery_menu\" android:visible=\"false\" app:showAsAction=\"never\" />
+          </menu>
+          """, encoding="utf-8")
+
+          tr = Path("app/src/main/res/values-tr")
+          tr.mkdir(parents=True, exist_ok=True)
+          (tr / "strings.xml").write_text("""<?xml version=\"1.0\" encoding=\"utf-8\"?>
+          <resources>
+              <string name=\"app_name\">KlonMatik</string>
+              <string name=\"choose\">Seç</string>
+              <string name=\"choose_app\">Uygulama Seç</string>
+              <string name=\"installed_app\">Yüklü Uygulamalar</string>
+              <string name=\"empty_empty\">Boş</string>
+              <string name=\"filter\">Filtre</string>
+              <string name=\"setting\">Ayarlar</string>
+              <string name=\"done\">Tamam</string>
+              <string name=\"cancel\">İptal</string>
+              <string name=\"app_stop\">Çalışmayı Durdur</string>
+              <string name=\"app_clear\">Veriyi Temizle</string>
+              <string name=\"app_remove\">Klonu Sil</string>
+              <string name=\"app_shortcut\">Kısayol Oluştur</string>
+              <string name=\"install_success\">Klon başarıyla eklendi</string>
+              <string name=\"install_fail\">Klon eklenemedi: %s</string>
+              <string name=\"install_fail_no_msg\">Klon eklenemedi</string>
+              <string name=\"uninstall_success\">Klon silindi</string>
+              <string name=\"uninstall_fail\">Klon silinemedi</string>
+              <string name=\"uninstall_app\">Klonu Sil</string>
+              <string name=\"remove_success\">Silindi</string>
+              <string name=\"clear_success\">Veriler temizlendi</string>
+              <string name=\"start_fail\">Uygulama açılamadı</string>
+              <string name=\"cannot_create_shortcut\">Bu ana ekran kısayol oluşturmayı desteklemiyor</string>
+              <string name=\"other\">Diğer</string>
+              <string name=\"dark_mode\">Koyu tema</string>
+              <string name=\"dark_mode_summary\">KlonMatik arayüzünde koyu tema kullan</string>
+              <string name=\"enable\">Etkinleştir</string>
+              <string name=\"gms_manager\">Google Servisleri</string>
+              <string name=\"jump_gms\">Google servisleri yönetimine git</string>
+              <string name=\"enable_gms\">Google servislerini etkinleştir</string>
+              <string name=\"disable_gms\">Google servislerini kapat</string>
+              <string name=\"about_title\">Hakkında</string>
+          </resources>
+          """, encoding="utf-8")
+          PY
+
+      - name: Build release compatibility APK
+        working-directory: .ci_klonmatik
+        shell: bash
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:assembleRelease --stacktrace
+
+      - name: Select and verify APK
+        shell: bash
+        run: |
+          mkdir -p out
+          APK="$(find .ci_klonmatik/app/build/outputs/apk/release -type f -name '*universal*.apk' | head -1)"
+          if [ -z "$APK" ]; then
+            APK="$(find .ci_klonmatik/app/build/outputs/apk/release -type f -name '*.apk' -printf '%s %p\n' | sort -nr | head -1 | cut -d' ' -f2-)"
+          fi
+          test -n "$APK"
+          cp "$APK" out/KlonMatik-v5-compat.apk
+
+          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          APKSIGNER="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          ZIPALIGN="$ANDROID_HOME/build-tools/35.0.0/zipalign"
+
+          "$AAPT" dump badging out/KlonMatik-v5-compat.apk | tee out/badging.txt
+          grep -q "package: name='com.naturel.klonmatik'" out/badging.txt
+          grep -q "targetSdkVersion:'28'" out/badging.txt
+          "$APKSIGNER" verify --verbose --print-certs out/KlonMatik-v5-compat.apk | tee out/signature.txt
+          "$ZIPALIGN" -c -P 16 -v 4 out/KlonMatik-v5-compat.apk > out/zipalign.txt
+          ! grep -q "application-debuggable" out/badging.txt
+          sha256sum out/KlonMatik-v5-compat.apk | tee out/KlonMatik-v5-compat.sha256
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: KlonMatik-v5-compat-apk
+          path: |
+            out/KlonMatik-v5-compat.apk
+            out/KlonMatik-v5-compat.sha256
+            out/badging.txt
+            out/signature.txt
+            out/zipalign.txt
+          if-no-files-found: error
