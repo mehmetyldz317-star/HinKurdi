@@ -1,4 +1,4 @@
-name: Build KlonMatik V4 APK
+name: Build KlonMatik V5 Compat APK
 
 on:
   pull_request:
@@ -53,9 +53,9 @@ jobs:
           # Modern target SDK and stable package identity.
           root_gradle = Path("build.gradle")
           s = root_gradle.read_text(encoding="utf-8")
-          s = s.replace("targetSdkVersion = 28", "targetSdkVersion = 35")
-          s = s.replace("versionCode = 460", "versionCode = 480")
-          s = s.replace("versionName = \"4.7.1\"", "versionName = \"4.8.0\"")
+          s = s.replace("targetSdkVersion = 28", "targetSdkVersion = 28")
+          s = s.replace("versionCode = 460", "versionCode = 490")
+          s = s.replace("versionName = \"4.7.1\"", "versionName = \"4.9.0\"")
           root_gradle.write_text(s, encoding="utf-8")
 
           app_gradle = Path("app/build.gradle")
@@ -118,6 +118,19 @@ jobs:
               "android.permission.RECEIVE_SMS",
               "android.permission.SEND_SMS",
               "android.permission.RECEIVE_BOOT_COMPLETED",
+              "android.permission.GET_TASKS",
+              "android.permission.REORDER_TASKS",
+              "android.permission.KILL_BACKGROUND_PROCESSES",
+              "android.permission.EXPAND_STATUS_BAR",
+              "android.permission.DISABLE_KEYGUARD",
+              "android.permission.BROADCAST_STICKY",
+              "android.permission.GET_PACKAGE_SIZE",
+              "android.permission.WRITE_SYNC_SETTINGS",
+              "android.permission.READ_SYNC_SETTINGS",
+              "android.permission.READ_SYNC_STATS",
+              "android.permission.SET_WALLPAPER",
+              "android.permission.SET_WALLPAPER_HINTS",
+              "android.permission.REQUEST_INSTALL_PACKAGES",
               "android.permission.USE_BIOMETRIC",
               "android.permission.USE_FINGERPRINT",
               "com.google.android.c2dm.permission.RECEIVE",
@@ -216,7 +229,7 @@ jobs:
           """, encoding="utf-8")
           PY
 
-      - name: Build release-style APK
+      - name: Build release compatibility APK
         working-directory: .ci_klonmatik
         shell: bash
         run: |
@@ -232,7 +245,7 @@ jobs:
             APK="$(find .ci_klonmatik/app/build/outputs/apk/release -type f -name '*.apk' -printf '%s %p\n' | sort -nr | head -1 | cut -d' ' -f2-)"
           fi
           test -n "$APK"
-          cp "$APK" out/KlonMatik-v4.apk
+          cp "$APK" out/KlonMatik-v5-compat.apk
 
           AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
           APKSIGNER="$ANDROID_HOME/build-tools/35.0.0/apksigner"
@@ -240,16 +253,16 @@ jobs:
 
           "$AAPT" dump badging out/KlonMatik-v4.apk | tee out/badging.txt
           grep -q "package: name='com.naturel.klonmatik'" out/badging.txt
-          grep -q "targetSdkVersion:'35'" out/badging.txt
+          grep -q "targetSdkVersion:'28'" out/badging.txt
           "$APKSIGNER" verify --verbose --print-certs out/KlonMatik-v4.apk | tee out/signature.txt
           "$ZIPALIGN" -c -P 16 -v 4 out/KlonMatik-v4.apk > out/zipalign.txt
           ! grep -q "application-debuggable" out/badging.txt
-          sha256sum out/KlonMatik-v4.apk | tee out/KlonMatik-v4.sha256
+          sha256sum out/KlonMatik-v4.apk | tee out/KlonMatik-v5-compat.sha256
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: KlonMatik-v4-apk
+          name: KlonMatik-v5-compat-apk
           path: |
             out/KlonMatik-v4.apk
             out/KlonMatik-v4.sha256
