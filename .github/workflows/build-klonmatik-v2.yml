@@ -141,6 +141,23 @@ jobs:
               except Exception as e:
                   print("manifest sanitize skipped", manifest, e)
 
+          # Fail fast if source sanitizing did not actually remove privileged/OEM permissions.
+          source_check = Path("Bcore/src/main/AndroidManifest.xml").read_text(encoding="utf-8")
+          forbidden = [
+              "android.permission.INSTALL_PACKAGES",
+              "android.permission.DELETE_PACKAGES",
+              "android.permission.INTERACT_ACROSS_USERS",
+              "android.permission.INTERACT_ACROSS_USERS_FULL",
+              "android.permission.DEVICE_POWER",
+              "android.permission.READ_LOGS",
+              "com.samsung.svoice.sync.READ_DATABASE",
+              "com.huawei.authentication.HW_ACCESS_AUTH_SERVICE",
+          ]
+          leaked = [p for p in forbidden if p in source_check]
+          if leaked:
+              raise SystemExit("Forbidden permissions still present: " + ", ".join(leaked))
+          print("Sanitized Bcore permission count:", source_check.count("<uses-permission"))
+
           # Branding.
           p = Path("app/src/main/res/values/strings.xml")
           s = p.read_text(encoding="utf-8")
