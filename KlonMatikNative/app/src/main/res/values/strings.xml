@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">KlonMatik Native</string>
+    <string name="admin_description">Yerel iş profilini ve klon alanını yönetir.</string>
+</resources>

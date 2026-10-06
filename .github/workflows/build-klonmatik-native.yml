@@ -1,0 +1,71 @@
+name: Build KlonMatik Native APK
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'KlonMatikNative/**'
+      - '.github/workflows/build-klonmatik-native.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          export ANDROID_HOME=/usr/local/lib/android/sdk
+          export ANDROID_SDK_ROOT=/usr/local/lib/android/sdk
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build APK
+        shell: bash
+        run: |
+          cd KlonMatikNative
+          gradle :app:assembleDebug --stacktrace
+          cp app/build/outputs/apk/debug/app-debug.apk KlonMatik-Native-v1.apk
+
+      - name: Verify APK
+        shell: bash
+        run: |
+          mkdir -p out
+          cp KlonMatikNative/KlonMatik-Native-v1.apk out/KlonMatik-Native-v1.apk
+          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          APKSIGNER="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          ZIPALIGN="$ANDROID_HOME/build-tools/35.0.0/zipalign"
+          "$AAPT" dump badging out/KlonMatik-Native-v1.apk | tee out/badging.txt
+          grep -q "package: name='com.naturel.klonmatiknative'" out/badging.txt
+          grep -q "targetSdkVersion:'35'" out/badging.txt
+          "$APKSIGNER" verify --verbose --print-certs out/KlonMatik-Native-v1.apk | tee out/signature.txt
+          "$ZIPALIGN" -c -P 16 -v 4 out/KlonMatik-Native-v1.apk > out/zipalign.txt
+          sha256sum out/KlonMatik-Native-v1.apk | tee out/KlonMatik-Native-v1.sha256
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: KlonMatik-Native-v1-apk
+          path: |
+            out/KlonMatik-Native-v1.apk
+            out/KlonMatik-Native-v1.sha256
+            out/badging.txt
+            out/signature.txt
+            out/zipalign.txt
+          if-no-files-found: error
