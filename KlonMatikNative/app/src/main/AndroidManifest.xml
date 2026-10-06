@@ -24,7 +24,12 @@
         <activity
             android:name=".InstallProxyActivity"
             android:exported="true"
-            android:theme="@android:style/Theme.Material.Light.NoActionBar" />
+            android:theme="@android:style/Theme.Material.Light.NoActionBar">
+            <intent-filter>
+                <action android:name="com.naturel.klonmatiknative.action.INSTALL_CLONE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
 
         <activity
             android:name=".ProvisioningModeActivity"
