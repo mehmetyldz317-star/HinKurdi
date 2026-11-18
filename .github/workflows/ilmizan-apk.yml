@@ -51,14 +51,14 @@ jobs:
           "$SDK_APKSIGNER" verify --verbose --print-certs "$OUTPUT"
           unzip -t "$OUTPUT"
           ACTUAL=$("$SDK_APKSIGNER" verify --print-certs "$OUTPUT" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -1)
-          EXPECTED=1f05c656a8b3cbaa4d4d9cca5bf2793f1415cdcd253a0f3f296195e9edb64271
+          EXPECTED=b657863cc383596f13dce41fcfa27eb9b1661c5a467b75af923da692577a2d56
           if [ "$ACTUAL" != "$EXPECTED" ]; then
-            echo "::error::Signer differs from installed v1.2.0; do not publish as update."
+            echo "::error::Signer differs from preserved stable key; stop build."
             exit 1
           fi
       - name: Upload compatible APK
         uses: actions/upload-artifact@v4
         with:
-          name: ILMIZAN-Kitapligim-v1.3.1-APK
+          name: ILMIZAN-Kitapligim-v1.3.2-YeniKurulum-APK
           path: ilmizan/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
